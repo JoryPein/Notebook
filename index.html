@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>备忘录 (Markdown)</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Toast UI Editor 资源 -->
+    <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
+    <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+    <!-- ★ 新增：引入 JSZip 库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <style>
+        /* 为活动列表项添加平滑过渡 */
+        #folder-list li, #note-list li {
+            transition: background-color 0.2s ease-in-out;
+        }
+        /* 隐藏原生搜索框的清除按钮 */
+        #search-input::-webkit-search-cancel-button {
+            -webkit-appearance: none;
+        }
+        /* 确保编辑器填满容器 */
+        #editor {
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+
+    <div class="flex h-screen">
+        <!-- 侧边栏 -->
+        <aside id="sidebar" class="w-full md:w-80 bg-gray-50 flex flex-col absolute md:static z-20 -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out h-full border-r border-gray-200">
+            <!-- 头部 -->
+            <div class="px-4 pt-5 pb-2 flex justify-between items-center">
+                <h1 class="text-2xl font-bold">备忘录</h1>
+                <button id="new-note-btn" title="新建备忘录" class="text-yellow-500 hover:text-yellow-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
+                </button>
+            </div>
+
+            <!-- 搜索框 -->
+            <div class="px-4 py-2">
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                        <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>
+                    </span>
+                    <input id="search-input" type="search" placeholder="搜索" class="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400">
+                </div>
+            </div>
+            
+            <!-- 文件夹列表 -->
+            <div class="px-4 pt-2 border-t border-gray-200">
+                <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">文件夹</h2>
+                <ul id="folder-list" class="overflow-y-auto">
+                    <!-- JS动态填充 -->
+                </ul>
+            </div>
+            
+            <!-- 备忘录列表 -->
+            <div class="flex-grow flex flex-col min-h-0 border-t border-gray-200 mt-4">
+                <h2 id="notes-header" class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-4 pt-4">备忘录</h2>
+                 <ul id="note-list" class="overflow-y-auto flex-grow">
+                    <!-- JS动态填充 -->
+                </ul>
+            </div>
+
+            <!-- 底部操作 -->
+            <div class="p-2 border-t border-gray-200 space-y-1">
+                <button id="new-folder-btn" class="w-full text-left text-sm p-2 rounded-md text-yellow-600 hover:bg-yellow-100 flex items-center">
+                    <span class="text-lg mr-1">+</span> 新建文件夹
+                </button>
+                <!-- ★ 新增：导出按钮 -->
+                <button id="export-all-btn" class="w-full text-left text-sm p-2 rounded-md text-gray-600 hover:bg-gray-200 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    导出所有备忘录
+                </button>
+            </div>
+        </aside>
+
+        <!-- 主内容区域 (编辑器) -->
+        <main class="flex-1 flex flex-col w-full bg-white md:bg-gray-100">
+            <header class="p-2 border-b border-gray-200 flex justify-between items-center bg-white md:bg-transparent">
+                <button id="menu-toggle-btn" class="p-2 text-gray-600 hover:text-gray-800 md:hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                </button>
+                <div class="flex-grow"></div>
+                <select id="note-folder-selector" class="hidden mr-4 text-sm bg-gray-200 border-none rounded-md p-2 focus:ring-2 focus:ring-yellow-400 outline-none"></select>
+                <button id="delete-note-btn" title="删除备忘录" class="p-2 text-red-500 hover:text-red-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+            </header>
+            
+            <div id="editor-placeholder" class="flex-grow p-5 text-lg text-gray-400 flex items-center justify-center">
+                <span>选择一个备忘录或创建一个新的</span>
+            </div>
+            <div id="editor" class="flex-grow w-full hidden"></div>
+
+        </main>
+    </div>
+
+    <!-- 右键上下文菜单 -->
+    <div id="note-context-menu" class="hidden absolute z-30 bg-white border border-gray-200 rounded-md shadow-lg py-1">
+        <button data-action="delete" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            删除备忘录
+        </button>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM 元素
+            const noteFolderSelector = document.getElementById('note-folder-selector');
+            const folderList = document.getElementById('folder-list');
+            const noteList = document.getElementById('note-list');
+            const editorContainer = document.getElementById('editor');
+            const editorPlaceholder = document.getElementById('editor-placeholder');
+            const newNoteBtn = document.getElementById('new-note-btn');
+            const deleteNoteBtn = document.getElementById('delete-note-btn');
+            const newFolderBtn = document.getElementById('new-folder-btn');
+            const searchInput = document.getElementById('search-input');
+            const sidebar = document.getElementById('sidebar');
+            const menuToggleBtn = document.getElementById('menu-toggle-btn');
+            const notesHeader = document.getElementById('notes-header');
+            const noteContextMenu = document.getElementById('note-context-menu');
+            // ★ 新增：获取导出按钮
+            const exportAllBtn = document.getElementById('export-all-btn');
+
+            let db;
+            let activeNoteId = null;
+            let activeFolderId = 'all'; 
+            let currentSearchQuery = '';
+            let debounceTimeout;
+
+            const editor = new toastui.Editor({
+                el: editorContainer,
+                height: '100%',
+                initialEditType: 'wysiwyg',
+                previewStyle: 'vertical',
+                placeholder: '开始书写你的想法...',
+            });
+
+            // ... (数据库初始化和大部分已有函数保持不变) ...
+            
+            // 1. 初始化数据库
+            const request = indexedDB.open('NotesAppDB_v5', 1);
+
+            request.onupgradeneeded = (e) => {
+                db = e.target.result;
+                if (!db.objectStoreNames.contains('folders')) {
+                    db.createObjectStore('folders', { keyPath: 'id', autoIncrement: true });
+                }
+                if (!db.objectStoreNames.contains('notes')) {
+                    const notesStore = db.createObjectStore('notes', { keyPath: 'id', autoIncrement: true });
+                    notesStore.createIndex('folderId_idx', 'folderId', { unique: false });
+                }
+            };
+
+            request.onsuccess = (e) => {
+                db = e.target.result;
+                renderUI();
+            };
+            request.onerror = (e) => console.error('数据库错误:', e.target.errorCode);
+
+            // --- 渲染函数 ---
+            const renderUI = async () => {
+                await populateFolderSelector();
+                await displayFolders();
+                await displayNotes();
+                updateActiveStates();
+            };
+            
+            const displayFolders = async () => {
+                if (!db) return;
+                const allFolders = await getAllFromStore('folders');
+                folderList.innerHTML = `<li data-folder-id="all" class="p-2 rounded-md cursor-pointer hover:bg-yellow-100 flex justify-between items-center"><span class="font-semibold">所有备忘录</span></li>`; 
+                allFolders.sort((a,b) => a.name.localeCompare(b.name, 'zh-CN')).forEach(folder => {
+                    const listItem = document.createElement('li');
+                    listItem.dataset.folderId = folder.id;
+                    listItem.className = "p-2 rounded-md cursor-pointer hover:bg-yellow-100 flex justify-between items-center group";
+                    listItem.innerHTML = `<span>${folder.name}</span><button title="删除文件夹" class="delete-folder-btn hidden group-hover:block text-red-500 text-xs">🗑️</button>`;
+                    folderList.appendChild(listItem);
+                });
+            };
+
+            const displayNotes = async () => {
+                if (!db) return;
+                let notes;
+                const allFolders = await getAllFromStore('folders');
+                const folderMap = new Map(allFolders.map(f => [f.id, f.name]));
+                if (currentSearchQuery) {
+                    notesHeader.textContent = `搜索结果`;
+                    const allNotes = await getAllFromStore('notes');
+                    const query = currentSearchQuery.toLowerCase();
+                    notes = allNotes.filter(note => note.content.toLowerCase().includes(query));
+                    noteList.innerHTML = '';
+                    notes.forEach(note => {
+                        const listItem = createNoteListItem(note, folderMap.get(note.folderId));
+                        noteList.appendChild(listItem);
+                    });
+                } else {
+                    if (activeFolderId === 'all') {
+                        notes = await getAllFromStore('notes');
+                        notesHeader.textContent = "所有备忘录";
+                    } else {
+                        notes = await getAllFromIndex('notes', 'folderId_idx', IDBKeyRange.only(activeFolderId));
+                        const folder = folderMap.get(activeFolderId);
+                        notesHeader.textContent = folder ? folder : "备忘录";
+                    }
+                    notes.sort((a, b) => b.timestamp - a.timestamp);
+                    noteList.innerHTML = '';
+                    notes.forEach(note => {
+                         const listItem = createNoteListItem(note);
+                         noteList.appendChild(listItem);
+                    });
+                }
+            };
+            
+            const createNoteListItem = (note, folderName = null) => {
+                const [title, ...rest] = note.content.split('\n');
+                const contentPreview = rest.join(' ').trim().replace(/<[^>]*>?/gm, '') || '没有额外内容';
+                const listItem = document.createElement('li');
+                listItem.dataset.noteId = note.id;
+                listItem.className = `p-4 border-b border-gray-200 cursor-pointer hover:bg-yellow-100`;
+                let folderInfo = folderName ? `<span class="text-xs text-yellow-700 bg-yellow-200 px-1.5 py-0.5 rounded-full">${folderName}</span>` : '';
+                listItem.innerHTML = `<h2 class="font-bold text-gray-800 truncate">${title || '新备忘录'}</h2><div class="flex justify-between items-center mt-1"><p class="text-sm text-gray-500 truncate flex-grow">${contentPreview}</p>${folderInfo}</div>`;
+                return listItem;
+            };
+            
+            const populateFolderSelector = async () => {
+                if (!db) return;
+                const allFolders = await getAllFromStore('folders');
+                noteFolderSelector.innerHTML = `<option value="null">未分类</option>`;
+                allFolders.sort((a,b) => a.name.localeCompare(b.name, 'zh-CN')).forEach(folder => {
+                    noteFolderSelector.innerHTML += `<option value="${folder.id}">${folder.name}</option>`;
+                });
+            };
+
+            // --- 数据库辅助函数 ---
+            const dbRequest = (store, method, ...args) => new Promise((res, rej) => {
+                const req = store[method](...args);
+                req.onsuccess = () => res(req.result);
+                req.onerror = (e) => rej(e.target.error);
+            });
+            const getAllFromStore = (storeName) => new Promise((res, rej) => {
+                const t = db.transaction([storeName], 'readonly');
+                dbRequest(t.objectStore(storeName), 'getAll').then(res, rej);
+            });
+            const getAllFromIndex = (storeName, indexName, query) => new Promise((res, rej) => {
+                const t = db.transaction([storeName], 'readonly');
+                const i = t.objectStore(storeName).index(indexName);
+                dbRequest(i, 'getAll', query).then(res, rej);
+            });
+            const getById = (storeName, id) => new Promise((res, rej) => {
+                const t = db.transaction([storeName], 'readonly');
+                dbRequest(t.objectStore(storeName), 'get', id).then(res, rej);
+            });
+            const countInIndex = (storeName, indexName, query) => new Promise((res, rej) => {
+                const t = db.transaction([storeName], 'readonly');
+                const i = t.objectStore(storeName).index(indexName);
+                dbRequest(i, 'count', query).then(res, rej);
+            });
+
+            // --- 核心逻辑函数 ---
+            const createNote = async () => {
+                const noteFolderId = (activeFolderId === 'all' || currentSearchQuery) ? null : activeFolderId;
+                const newNote = { content: '# 新备忘录\n\n', timestamp: Date.now(), folderId: noteFolderId };
+                const t = db.transaction(['notes'], 'readwrite');
+                const newId = await dbRequest(t.objectStore('notes'), 'add', newNote);
+                await t.done;
+                if (currentSearchQuery) { searchInput.value = ''; currentSearchQuery = ''; }
+                await selectNote(newId);
+                editor.focus();
+            };
+
+            const selectNote = async (id) => {
+                const note = await getById('notes', id);
+                if (note) {
+                    activeNoteId = id;
+                    editor.setMarkdown(note.content || '');
+                    editorContainer.classList.remove('hidden');
+                    editorPlaceholder.style.display = 'none';
+                    deleteNoteBtn.style.display = 'block';
+                    noteFolderSelector.classList.remove('hidden');
+                    noteFolderSelector.value = note.folderId === null ? 'null' : note.folderId;
+                    if (currentSearchQuery) { activeFolderId = note.folderId || 'all'; }
+                    await renderUI();
+                }
+                if (window.innerWidth < 768) sidebar.classList.add('-translate-x-full');
+            };
+            
+            const selectFolder = async (id) => {
+                activeFolderId = id;
+                activeNoteId = null; 
+                searchInput.value = ''; currentSearchQuery = '';
+                editorContainer.classList.add('hidden');
+                editorPlaceholder.style.display = 'flex';
+                deleteNoteBtn.style.display = 'none';
+                noteFolderSelector.classList.add('hidden');
+                await renderUI();
+            };
+
+            const updateNote = async () => {
+                if (activeNoteId === null) return;
+                const t = db.transaction(['notes'], 'readwrite');
+                const store = t.objectStore('notes');
+                const existingNote = await dbRequest(store, 'get', activeNoteId);
+                if (existingNote) {
+                    const updatedNote = { ...existingNote, content: editor.getMarkdown(), timestamp: Date.now() };
+                    store.put(updatedNote);
+                    await t.done;
+                    await displayNotes();
+                    updateActiveStates();
+                }
+            };
+            
+            const handleDeleteNote = async (noteIdToDelete) => {
+                if (noteIdToDelete === null || !confirm('确定要删除这个备忘录吗？')) return;
+
+                const t = db.transaction(['notes'], 'readwrite');
+                await dbRequest(t.objectStore('notes'), 'delete', noteIdToDelete);
+                await t.done;
+
+                if (activeNoteId === noteIdToDelete) {
+                    activeNoteId = null;
+                    editorContainer.classList.add('hidden');
+                    editorPlaceholder.style.display = 'flex';
+                    deleteNoteBtn.style.display = 'none';
+                    noteFolderSelector.classList.add('hidden');
+                }
+                
+                await renderUI();
+            };
+
+            const createFolder = async () => {
+                const folderName = prompt("请输入新文件夹的名称：");
+                if (folderName?.trim()) {
+                    const t = db.transaction(['folders'], 'readwrite');
+                    await dbRequest(t.objectStore('folders'), 'add', { name: folderName.trim() });
+                    await t.done;
+                    await renderUI();
+                }
+            };
+
+            const deleteFolder = async (folderId) => {
+                const noteCount = await countInIndex('notes', 'folderId_idx', IDBKeyRange.only(folderId));
+                if (noteCount > 0) { alert('文件夹不为空，无法删除。'); return; }
+                if (confirm('确定要删除这个空文件夹吗？')) {
+                    const t = db.transaction(['folders'], 'readwrite');
+                    await dbRequest(t.objectStore('folders'), 'delete', folderId);
+                    await t.done;
+                    if(activeFolderId === folderId) await selectFolder('all');
+                    else await renderUI();
+                }
+            };
+
+            const moveNoteToFolder = async () => {
+                if (activeNoteId === null) return;
+                const newFolderId = noteFolderSelector.value === 'null' ? null : parseInt(noteFolderSelector.value);
+                const t = db.transaction(['notes'], 'readwrite');
+                const store = t.objectStore('notes');
+                const note = await dbRequest(store, 'get', activeNoteId);
+                if (note && note.folderId !== newFolderId) {
+                    note.folderId = newFolderId;
+                    store.put(note);
+                    await t.done;
+                    await renderUI();
+                }
+            };
+            
+            // ★ 新增：导出所有笔记为 ZIP 的函数
+            const exportAllNotesAsZip = async () => {
+                const originalBtnContent = exportAllBtn.innerHTML;
+                exportAllBtn.disabled = true;
+                exportAllBtn.innerHTML = '正在导出...';
+
+                try {
+                    const notes = await getAllFromStore('notes');
+                    if (notes.length === 0) {
+                        alert('没有备忘录可导出。');
+                        return;
+                    }
+                    const folders = await getAllFromStore('folders');
+                    const folderMap = new Map(folders.map(f => [f.id, f.name]));
+                    
+                    const zip = new JSZip();
+
+                    for (const note of notes) {
+                        const folderName = folderMap.get(note.folderId) || '未分类';
+                        
+                        // 生成并清理文件名
+                        let fileName = (note.content.split('\n')[0] || '无标题笔记')
+                            .replace(/^[#\s]+/, '') // 移除开头的#和空格
+                            .replace(/[\\/:\*\?"<>\|]/g, '_') // 替换非法字符
+                            .trim();
+                        if (!fileName) fileName = '无标题笔记';
+                        
+                        let fullPath = `${folderName}/${fileName}.md`;
+                        
+                        // 处理重名文件
+                        let counter = 1;
+                        while(zip.file(fullPath)) {
+                            fullPath = `${folderName}/${fileName} (${counter++}).md`;
+                        }
+
+                        zip.file(fullPath, note.content);
+                    }
+
+                    const blob = await zip.generateAsync({ type: 'blob' });
+                    
+                    // 创建并触发下载链接
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `备忘录导出.zip`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(link.href);
+
+                } catch (error) {
+                    console.error('导出失败:', error);
+                    alert('导出过程中发生错误。');
+                } finally {
+                    exportAllBtn.disabled = false;
+                    exportAllBtn.innerHTML = originalBtnContent;
+                }
+            };
+            
+            const updateActiveStates = () => {
+                document.querySelectorAll('#folder-list li').forEach(li => {
+                    li.classList.toggle('bg-yellow-200', !currentSearchQuery && li.dataset.folderId == activeFolderId);
+                });
+                document.querySelectorAll('#note-list li').forEach(li => {
+                    li.classList.toggle('bg-yellow-200', li.dataset.noteId == activeNoteId);
+                });
+            };
+
+            // --- 事件监听 ---
+            searchInput.addEventListener('input', () => {
+                currentSearchQuery = searchInput.value.trim();
+                activeNoteId = null; 
+                editorContainer.classList.add('hidden');
+                editorPlaceholder.style.display = 'flex';
+                deleteNoteBtn.style.display = 'none';
+                noteFolderSelector.classList.add('hidden');
+                clearTimeout(debounceTimeout);
+                debounceTimeout = setTimeout(renderUI, 250);
+            });
+            noteFolderSelector.addEventListener('change', moveNoteToFolder);
+            newFolderBtn.addEventListener('click', createFolder);
+            newNoteBtn.addEventListener('click', createNote);
+            deleteNoteBtn.addEventListener('click', () => handleDeleteNote(activeNoteId));
+            // ★ 新增：为导出按钮添加监听
+            exportAllBtn.addEventListener('click', exportAllNotesAsZip);
+            
+            folderList.addEventListener('click', e => {
+                const targetLi = e.target.closest('li');
+                if (!targetLi) return;
+                const folderIdStr = targetLi.dataset.folderId;
+                const folderId = isNaN(parseInt(folderIdStr)) ? folderIdStr : parseInt(folderIdStr);
+                if (e.target.closest('.delete-folder-btn')) deleteFolder(folderId);
+                else selectFolder(folderId);
+            });
+            
+            noteList.addEventListener('click', e => {
+                const targetLi = e.target.closest('li');
+                if (targetLi) selectNote(parseInt(targetLi.dataset.noteId));
+            });
+            
+            noteList.addEventListener('contextmenu', e => {
+                e.preventDefault(); 
+                const targetLi = e.target.closest('li');
+                if (targetLi) {
+                    const noteId = targetLi.dataset.noteId;
+                    noteContextMenu.dataset.noteId = noteId; 
+                    
+                    noteContextMenu.style.top = `${e.clientY}px`;
+                    noteContextMenu.style.left = `${e.clientX}px`;
+                    noteContextMenu.classList.remove('hidden');
+                }
+            });
+
+            noteContextMenu.addEventListener('click', e => {
+                const action = e.target.closest('button')?.dataset.action;
+                const noteId = parseInt(noteContextMenu.dataset.noteId);
+                if (action === 'delete' && noteId) {
+                    handleDeleteNote(noteId);
+                }
+                noteContextMenu.classList.add('hidden');
+            });
+
+            window.addEventListener('click', () => {
+                noteContextMenu.classList.add('hidden');
+            });
+            
+            let updateTimeout;
+            editor.on('change', () => {
+                clearTimeout(updateTimeout);
+                updateTimeout = setTimeout(updateNote, 300);
+            });
+
+            menuToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                sidebar.classList.toggle('-translate-x-full');
+            });
+
+            // 初始状态
+            deleteNoteBtn.style.display = 'none';
+            noteFolderSelector.classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
