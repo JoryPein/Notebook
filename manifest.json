@@ -1,0 +1,21 @@
+{
+  "name": "Markdown 备忘录",
+  "short_name": "备忘录",
+  "description": "一个简单的、支持 Markdown 的本地备忘录应用。",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#FDF6E3",
+  "theme_color": "#FBBF24",
+  "icons": [
+    {
+      "src": "https://www.w3.org/TR/appmanifest/images/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://www.w3.org/TR/appmanifest/images/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

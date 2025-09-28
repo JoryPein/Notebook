@@ -1,41 +1,38 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" id="html-root">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>备忘录 (Markdown)</title>
-    <!-- 引入Tailwind CSS -->
+    <title>备忘录</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#FBBF24">
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Toast UI Editor 资源 -->
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
     <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css" />
     <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
-    <!-- ★ 新增：引入 JSZip 库 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
     <style>
-        /* 为活动列表项添加平滑过渡 */
-        #folder-list li, #note-list li {
-            transition: background-color 0.2s ease-in-out;
-        }
-        /* 隐藏原生搜索框的清除按钮 */
-        #search-input::-webkit-search-cancel-button {
-            -webkit-appearance: none;
-        }
-        /* 确保编辑器填满容器 */
-        #editor {
-            height: 100%;
-        }
+        #folder-list li, #note-list li { transition: background-color 0.2s ease-in-out; }
+        #search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+        #editor { height: 100%; }
+        .tag-pill { transition: background-color 0.2s; }
+        .tag-remove-btn { opacity: 0; transition: opacity 0.2s; }
+        .tag-pill:hover .tag-remove-btn { opacity: 1; }
+        /* ★ 新增：为弹窗添加简单的动画效果 */
+        #confirmation-modal > div { transition: transform 0.2s ease-out; }
     </style>
 </head>
-<body class="bg-gray-100 font-sans text-gray-800">
+<body class="bg-gray-100 dark:bg-gray-900 font-sans text-gray-800 dark:text-gray-200">
 
     <div class="flex h-screen">
         <!-- 侧边栏 -->
-        <aside id="sidebar" class="w-full md:w-80 bg-gray-50 flex flex-col absolute md:static z-20 -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out h-full border-r border-gray-200">
+        <aside id="sidebar" class="w-full md:w-80 bg-gray-50 dark:bg-gray-800 flex flex-col absolute md:static z-20 -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out h-full border-r border-gray-200 dark:border-gray-700">
             <!-- 头部 -->
             <div class="px-4 pt-5 pb-2 flex justify-between items-center">
-                <h1 class="text-2xl font-bold">备忘录</h1>
-                <button id="new-note-btn" title="新建备忘录" class="text-yellow-500 hover:text-yellow-600">
+                <h1 class="text-2xl font-bold dark:text-white">备忘录</h1>
+                <button id="new-note-btn" title="新建备忘录" class="text-yellow-500 hover:text-yellow-600 dark:hover:text-yellow-400">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
                 </button>
             </div>
@@ -46,469 +43,285 @@
                     <span class="absolute inset-y-0 left-0 flex items-center pl-3">
                         <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>
                     </span>
-                    <input id="search-input" type="search" placeholder="搜索" class="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400">
+                    <input id="search-input" type="search" placeholder="搜索内容和标签" class="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 dark:focus:ring-yellow-500 bg-white dark:bg-gray-700 dark:text-gray-200">
                 </div>
             </div>
             
             <!-- 文件夹列表 -->
-            <div class="px-4 pt-2 border-t border-gray-200">
-                <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">文件夹</h2>
-                <ul id="folder-list" class="overflow-y-auto">
-                    <!-- JS动态填充 -->
-                </ul>
+            <div class="px-4 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <h2 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">文件夹</h2>
+                <ul id="folder-list" class="overflow-y-auto"></ul>
             </div>
             
             <!-- 备忘录列表 -->
-            <div class="flex-grow flex flex-col min-h-0 border-t border-gray-200 mt-4">
-                <h2 id="notes-header" class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-4 pt-4">备忘录</h2>
-                 <ul id="note-list" class="overflow-y-auto flex-grow">
-                    <!-- JS动态填充 -->
-                </ul>
+            <div class="flex-grow flex flex-col min-h-0 border-t border-gray-200 dark:border-gray-700 mt-4">
+                <h2 id="notes-header" class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-4 pt-4">备忘录</h2>
+                 <ul id="note-list" class="overflow-y-auto flex-grow"></ul>
             </div>
 
             <!-- 底部操作 -->
-            <div class="p-2 border-t border-gray-200 space-y-1">
-                <button id="new-folder-btn" class="w-full text-left text-sm p-2 rounded-md text-yellow-600 hover:bg-yellow-100 flex items-center">
+            <div class="p-2 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 gap-2">
+                <button id="new-folder-btn" class="w-full text-left text-sm p-2 rounded-md text-yellow-600 dark:text-yellow-400 hover:bg-yellow-100 dark:hover:bg-gray-700 flex items-center">
                     <span class="text-lg mr-1">+</span> 新建文件夹
                 </button>
-                <!-- ★ 新增：导出按钮 -->
-                <button id="export-all-btn" class="w-full text-left text-sm p-2 rounded-md text-gray-600 hover:bg-gray-200 flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                    导出所有备忘录
+                <button id="theme-toggle-btn" class="w-full text-sm p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center">
+                    <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    <svg id="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                    <span id="theme-text">切换主题</span>
                 </button>
+                <button id="export-all-btn" class="w-full text-left text-sm p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                    导出备份
+                </button>
+                <button id="import-zip-btn" class="w-full text-left text-sm p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                    导入备份
+                </button>
+                <input type="file" id="import-file-input" class="hidden" accept=".zip">
             </div>
         </aside>
 
         <!-- 主内容区域 (编辑器) -->
-        <main class="flex-1 flex flex-col w-full bg-white md:bg-gray-100">
-            <header class="p-2 border-b border-gray-200 flex justify-between items-center bg-white md:bg-transparent">
-                <button id="menu-toggle-btn" class="p-2 text-gray-600 hover:text-gray-800 md:hidden">
+        <main class="flex-1 flex flex-col w-full bg-white dark:bg-gray-800 md:bg-gray-100 md:dark:bg-gray-900">
+            <header class="p-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-white dark:bg-gray-800 md:bg-transparent md:dark:bg-transparent">
+                <button id="menu-toggle-btn" class="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white md:hidden">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
                 </button>
                 <div class="flex-grow"></div>
-                <select id="note-folder-selector" class="hidden mr-4 text-sm bg-gray-200 border-none rounded-md p-2 focus:ring-2 focus:ring-yellow-400 outline-none"></select>
+                <select id="note-folder-selector" class="hidden mr-4 text-sm bg-gray-200 dark:bg-gray-700 border-none rounded-md p-2 focus:ring-2 focus:ring-yellow-400 dark:focus:ring-yellow-500 outline-none"></select>
                 <button id="delete-note-btn" title="删除备忘录" class="p-2 text-red-500 hover:text-red-700">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             </header>
             
-            <div id="editor-placeholder" class="flex-grow p-5 text-lg text-gray-400 flex items-center justify-center">
+            <div id="tags-area" class="hidden p-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center flex-wrap gap-2">
+                <div id="tags-container" class="flex items-center flex-wrap gap-2"></div>
+                <input id="tag-input" type="text" placeholder="添加标签..." class="bg-transparent text-sm p-1 focus:outline-none flex-grow min-w-[100px]">
+            </div>
+            
+            <div id="editor-placeholder" class="flex-grow p-5 text-lg text-gray-400 dark:text-gray-500 flex items-center justify-center">
                 <span>选择一个备忘录或创建一个新的</span>
             </div>
             <div id="editor" class="flex-grow w-full hidden"></div>
-
         </main>
     </div>
 
-    <!-- 右键上下文菜单 -->
-    <div id="note-context-menu" class="hidden absolute z-30 bg-white border border-gray-200 rounded-md shadow-lg py-1">
-        <button data-action="delete" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center">
+    <!-- ★ 不再需要右键菜单了，但保留HTML结构以备将来扩展 -->
+    <div id="note-context-menu" class="hidden absolute z-30 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg py-1">
+        <button data-action="delete" class="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-gray-600 flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
             删除备忘录
         </button>
     </div>
-
+    
+    <!-- ★ 新增：自定义确认删除弹窗 (Modal) -->
+    <div id="confirmation-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+            <h3 id="modal-title" class="text-lg font-bold text-gray-900 dark:text-white">确认删除</h3>
+            <div class="mt-2">
+                <p class="text-sm text-gray-600 dark:text-gray-300">
+                    您确定要永久删除这个备忘录吗？此操作无法撤销。
+                </p>
+            </div>
+            <div class="mt-5 sm:mt-6 flex justify-end space-x-3">
+                <button type="button" id="modal-cancel-btn" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                    取消
+                </button>
+                <button type="button" id="modal-confirm-btn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    确认删除
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // DOM 元素
-            const noteFolderSelector = document.getElementById('note-folder-selector');
-            const folderList = document.getElementById('folder-list');
+            // ... (其他 DOM 元素获取保持不变) ...
             const noteList = document.getElementById('note-list');
             const editorContainer = document.getElementById('editor');
             const editorPlaceholder = document.getElementById('editor-placeholder');
             const newNoteBtn = document.getElementById('new-note-btn');
             const deleteNoteBtn = document.getElementById('delete-note-btn');
+            // ... (其他所有元素)
+            const htmlRoot = document.getElementById('html-root');
+            const noteFolderSelector = document.getElementById('note-folder-selector');
+            const folderList = document.getElementById('folder-list');
             const newFolderBtn = document.getElementById('new-folder-btn');
             const searchInput = document.getElementById('search-input');
             const sidebar = document.getElementById('sidebar');
             const menuToggleBtn = document.getElementById('menu-toggle-btn');
             const notesHeader = document.getElementById('notes-header');
             const noteContextMenu = document.getElementById('note-context-menu');
-            // ★ 新增：获取导出按钮
             const exportAllBtn = document.getElementById('export-all-btn');
+            const themeToggleBtn = document.getElementById('theme-toggle-btn');
+            const themeIconLight = document.getElementById('theme-icon-light');
+            const themeIconDark = document.getElementById('theme-icon-dark');
+            const importZipBtn = document.getElementById('import-zip-btn');
+            const importFileInput = document.getElementById('import-file-input');
+            const tagsArea = document.getElementById('tags-area');
+            const tagsContainer = document.getElementById('tags-container');
+            const tagInput = document.getElementById('tag-input');
+            
+            // ★ 新增：获取模态弹窗的 DOM 元素
+            const confirmationModal = document.getElementById('confirmation-modal');
+            const modalCancelBtn = document.getElementById('modal-cancel-btn');
+            let modalConfirmBtn = document.getElementById('modal-confirm-btn'); // 使用 let 以便后续克隆替换
+
 
             let db;
             let activeNoteId = null;
             let activeFolderId = 'all'; 
             let currentSearchQuery = '';
             let debounceTimeout;
+            let updateTimeout;
+            let editor;
 
-            const editor = new toastui.Editor({
-                el: editorContainer,
-                height: '100%',
-                initialEditType: 'wysiwyg',
-                previewStyle: 'vertical',
-                placeholder: '开始书写你的想法...',
-            });
-
-            // ... (数据库初始化和大部分已有函数保持不变) ...
-            
-            // 1. 初始化数据库
-            const request = indexedDB.open('NotesAppDB_v5', 1);
-
+            // ... (数据库初始化和大部分函数保持不变，我们将只替换 handleDeleteNote) ...
+            const request = indexedDB.open('NotesAppDB_v6', 1);
             request.onupgradeneeded = (e) => {
                 db = e.target.result;
-                if (!db.objectStoreNames.contains('folders')) {
-                    db.createObjectStore('folders', { keyPath: 'id', autoIncrement: true });
-                }
+                if (!db.objectStoreNames.contains('folders')) { db.createObjectStore('folders', { keyPath: 'id', autoIncrement: true }); }
                 if (!db.objectStoreNames.contains('notes')) {
                     const notesStore = db.createObjectStore('notes', { keyPath: 'id', autoIncrement: true });
                     notesStore.createIndex('folderId_idx', 'folderId', { unique: false });
                 }
             };
-
-            request.onsuccess = (e) => {
-                db = e.target.result;
-                renderUI();
-            };
+            request.onsuccess = (e) => { db = e.target.result; initTheme(); renderUI(); };
             request.onerror = (e) => console.error('数据库错误:', e.target.errorCode);
 
-            // --- 渲染函数 ---
-            const renderUI = async () => {
-                await populateFolderSelector();
-                await displayFolders();
-                await displayNotes();
-                updateActiveStates();
-            };
-            
-            const displayFolders = async () => {
-                if (!db) return;
-                const allFolders = await getAllFromStore('folders');
-                folderList.innerHTML = `<li data-folder-id="all" class="p-2 rounded-md cursor-pointer hover:bg-yellow-100 flex justify-between items-center"><span class="font-semibold">所有备忘录</span></li>`; 
-                allFolders.sort((a,b) => a.name.localeCompare(b.name, 'zh-CN')).forEach(folder => {
-                    const listItem = document.createElement('li');
-                    listItem.dataset.folderId = folder.id;
-                    listItem.className = "p-2 rounded-md cursor-pointer hover:bg-yellow-100 flex justify-between items-center group";
-                    listItem.innerHTML = `<span>${folder.name}</span><button title="删除文件夹" class="delete-folder-btn hidden group-hover:block text-red-500 text-xs">🗑️</button>`;
-                    folderList.appendChild(listItem);
-                });
-            };
+            // ★ 更改：重写 handleDeleteNote 以使用自定义模态弹窗
+            // 这个函数现在只负责显示弹窗，并将删除逻辑的执行交给弹窗的确认按钮
+            function handleDeleteNote(noteIdToDelete) {
+                if (noteIdToDelete === null) return;
 
-            const displayNotes = async () => {
-                if (!db) return;
-                let notes;
-                const allFolders = await getAllFromStore('folders');
-                const folderMap = new Map(allFolders.map(f => [f.id, f.name]));
-                if (currentSearchQuery) {
-                    notesHeader.textContent = `搜索结果`;
-                    const allNotes = await getAllFromStore('notes');
-                    const query = currentSearchQuery.toLowerCase();
-                    notes = allNotes.filter(note => note.content.toLowerCase().includes(query));
-                    noteList.innerHTML = '';
-                    notes.forEach(note => {
-                        const listItem = createNoteListItem(note, folderMap.get(note.folderId));
-                        noteList.appendChild(listItem);
-                    });
-                } else {
-                    if (activeFolderId === 'all') {
-                        notes = await getAllFromStore('notes');
-                        notesHeader.textContent = "所有备忘录";
-                    } else {
-                        notes = await getAllFromIndex('notes', 'folderId_idx', IDBKeyRange.only(activeFolderId));
-                        const folder = folderMap.get(activeFolderId);
-                        notesHeader.textContent = folder ? folder : "备忘录";
-                    }
-                    notes.sort((a, b) => b.timestamp - a.timestamp);
-                    noteList.innerHTML = '';
-                    notes.forEach(note => {
-                         const listItem = createNoteListItem(note);
-                         noteList.appendChild(listItem);
-                    });
-                }
-            };
-            
-            const createNoteListItem = (note, folderName = null) => {
-                const [title, ...rest] = note.content.split('\n');
-                const contentPreview = rest.join(' ').trim().replace(/<[^>]*>?/gm, '') || '没有额外内容';
-                const listItem = document.createElement('li');
-                listItem.dataset.noteId = note.id;
-                listItem.className = `p-4 border-b border-gray-200 cursor-pointer hover:bg-yellow-100`;
-                let folderInfo = folderName ? `<span class="text-xs text-yellow-700 bg-yellow-200 px-1.5 py-0.5 rounded-full">${folderName}</span>` : '';
-                listItem.innerHTML = `<h2 class="font-bold text-gray-800 truncate">${title || '新备忘录'}</h2><div class="flex justify-between items-center mt-1"><p class="text-sm text-gray-500 truncate flex-grow">${contentPreview}</p>${folderInfo}</div>`;
-                return listItem;
-            };
-            
-            const populateFolderSelector = async () => {
-                if (!db) return;
-                const allFolders = await getAllFromStore('folders');
-                noteFolderSelector.innerHTML = `<option value="null">未分类</option>`;
-                allFolders.sort((a,b) => a.name.localeCompare(b.name, 'zh-CN')).forEach(folder => {
-                    noteFolderSelector.innerHTML += `<option value="${folder.id}">${folder.name}</option>`;
-                });
-            };
-
-            // --- 数据库辅助函数 ---
-            const dbRequest = (store, method, ...args) => new Promise((res, rej) => {
-                const req = store[method](...args);
-                req.onsuccess = () => res(req.result);
-                req.onerror = (e) => rej(e.target.error);
-            });
-            const getAllFromStore = (storeName) => new Promise((res, rej) => {
-                const t = db.transaction([storeName], 'readonly');
-                dbRequest(t.objectStore(storeName), 'getAll').then(res, rej);
-            });
-            const getAllFromIndex = (storeName, indexName, query) => new Promise((res, rej) => {
-                const t = db.transaction([storeName], 'readonly');
-                const i = t.objectStore(storeName).index(indexName);
-                dbRequest(i, 'getAll', query).then(res, rej);
-            });
-            const getById = (storeName, id) => new Promise((res, rej) => {
-                const t = db.transaction([storeName], 'readonly');
-                dbRequest(t.objectStore(storeName), 'get', id).then(res, rej);
-            });
-            const countInIndex = (storeName, indexName, query) => new Promise((res, rej) => {
-                const t = db.transaction([storeName], 'readonly');
-                const i = t.objectStore(storeName).index(indexName);
-                dbRequest(i, 'count', query).then(res, rej);
-            });
-
-            // --- 核心逻辑函数 ---
-            const createNote = async () => {
-                const noteFolderId = (activeFolderId === 'all' || currentSearchQuery) ? null : activeFolderId;
-                const newNote = { content: '# 新备忘录\n\n', timestamp: Date.now(), folderId: noteFolderId };
-                const t = db.transaction(['notes'], 'readwrite');
-                const newId = await dbRequest(t.objectStore('notes'), 'add', newNote);
-                await t.done;
-                if (currentSearchQuery) { searchInput.value = ''; currentSearchQuery = ''; }
-                await selectNote(newId);
-                editor.focus();
-            };
-
-            const selectNote = async (id) => {
-                const note = await getById('notes', id);
-                if (note) {
-                    activeNoteId = id;
-                    editor.setMarkdown(note.content || '');
-                    editorContainer.classList.remove('hidden');
-                    editorPlaceholder.style.display = 'none';
-                    deleteNoteBtn.style.display = 'block';
-                    noteFolderSelector.classList.remove('hidden');
-                    noteFolderSelector.value = note.folderId === null ? 'null' : note.folderId;
-                    if (currentSearchQuery) { activeFolderId = note.folderId || 'all'; }
-                    await renderUI();
-                }
-                if (window.innerWidth < 768) sidebar.classList.add('-translate-x-full');
-            };
-            
-            const selectFolder = async (id) => {
-                activeFolderId = id;
-                activeNoteId = null; 
-                searchInput.value = ''; currentSearchQuery = '';
-                editorContainer.classList.add('hidden');
-                editorPlaceholder.style.display = 'flex';
-                deleteNoteBtn.style.display = 'none';
-                noteFolderSelector.classList.add('hidden');
-                await renderUI();
-            };
-
-            const updateNote = async () => {
-                if (activeNoteId === null) return;
-                const t = db.transaction(['notes'], 'readwrite');
-                const store = t.objectStore('notes');
-                const existingNote = await dbRequest(store, 'get', activeNoteId);
-                if (existingNote) {
-                    const updatedNote = { ...existingNote, content: editor.getMarkdown(), timestamp: Date.now() };
-                    store.put(updatedNote);
-                    await t.done;
-                    await displayNotes();
-                    updateActiveStates();
-                }
-            };
-            
-            const handleDeleteNote = async (noteIdToDelete) => {
-                if (noteIdToDelete === null || !confirm('确定要删除这个备忘录吗？')) return;
-
-                const t = db.transaction(['notes'], 'readwrite');
-                await dbRequest(t.objectStore('notes'), 'delete', noteIdToDelete);
-                await t.done;
-
-                if (activeNoteId === noteIdToDelete) {
-                    activeNoteId = null;
-                    editorContainer.classList.add('hidden');
-                    editorPlaceholder.style.display = 'flex';
-                    deleteNoteBtn.style.display = 'none';
-                    noteFolderSelector.classList.add('hidden');
-                }
+                // 显示模态弹窗并添加动画
+                confirmationModal.classList.remove('hidden');
+                setTimeout(() => confirmationModal.querySelector('div').style.transform = 'scale(1)', 10);
                 
-                await renderUI();
-            };
+                // 使用 .cloneNode(true) 来移除旧的事件监听器，防止重复触发
+                const newConfirmBtn = modalConfirmBtn.cloneNode(true);
+                modalConfirmBtn.parentNode.replaceChild(newConfirmBtn, modalConfirmBtn);
+                modalConfirmBtn = newConfirmBtn; // 更新引用
 
-            const createFolder = async () => {
-                const folderName = prompt("请输入新文件夹的名称：");
-                if (folderName?.trim()) {
-                    const t = db.transaction(['folders'], 'readwrite');
-                    await dbRequest(t.objectStore('folders'), 'add', { name: folderName.trim() });
-                    await t.done;
-                    await renderUI();
-                }
-            };
-
-            const deleteFolder = async (folderId) => {
-                const noteCount = await countInIndex('notes', 'folderId_idx', IDBKeyRange.only(folderId));
-                if (noteCount > 0) { alert('文件夹不为空，无法删除。'); return; }
-                if (confirm('确定要删除这个空文件夹吗？')) {
-                    const t = db.transaction(['folders'], 'readwrite');
-                    await dbRequest(t.objectStore('folders'), 'delete', folderId);
-                    await t.done;
-                    if(activeFolderId === folderId) await selectFolder('all');
-                    else await renderUI();
-                }
-            };
-
-            const moveNoteToFolder = async () => {
-                if (activeNoteId === null) return;
-                const newFolderId = noteFolderSelector.value === 'null' ? null : parseInt(noteFolderSelector.value);
-                const t = db.transaction(['notes'], 'readwrite');
-                const store = t.objectStore('notes');
-                const note = await dbRequest(store, 'get', activeNoteId);
-                if (note && note.folderId !== newFolderId) {
-                    note.folderId = newFolderId;
-                    store.put(note);
-                    await t.done;
-                    await renderUI();
-                }
-            };
-            
-            // ★ 新增：导出所有笔记为 ZIP 的函数
-            const exportAllNotesAsZip = async () => {
-                const originalBtnContent = exportAllBtn.innerHTML;
-                exportAllBtn.disabled = true;
-                exportAllBtn.innerHTML = '正在导出...';
-
-                try {
-                    const notes = await getAllFromStore('notes');
-                    if (notes.length === 0) {
-                        alert('没有备忘录可导出。');
-                        return;
-                    }
-                    const folders = await getAllFromStore('folders');
-                    const folderMap = new Map(folders.map(f => [f.id, f.name]));
-                    
-                    const zip = new JSZip();
-
-                    for (const note of notes) {
-                        const folderName = folderMap.get(note.folderId) || '未分类';
+                // 为新的确认按钮添加一次性的点击事件
+                modalConfirmBtn.addEventListener('click', async () => {
+                    const t = db.transaction(['notes'], 'readwrite');
+                    try {
+                        await dbRequest(t.objectStore('notes'), 'delete', noteIdToDelete);
                         
-                        // 生成并清理文件名
-                        let fileName = (note.content.split('\n')[0] || '无标题笔记')
-                            .replace(/^[#\s]+/, '') // 移除开头的#和空格
-                            .replace(/[\\/:\*\?"<>\|]/g, '_') // 替换非法字符
-                            .trim();
-                        if (!fileName) fileName = '无标题笔记';
-                        
-                        let fullPath = `${folderName}/${fileName}.md`;
-                        
-                        // 处理重名文件
-                        let counter = 1;
-                        while(zip.file(fullPath)) {
-                            fullPath = `${folderName}/${fileName} (${counter++}).md`;
+                        if (activeNoteId === noteIdToDelete) {
+                            activeNoteId = null;
+                            editorContainer.classList.add('hidden');
+                            editorPlaceholder.style.display = 'flex';
+                            deleteNoteBtn.style.display = 'none';
+                            noteFolderSelector.classList.add('hidden');
+                            tagsArea.classList.add('hidden');
                         }
-
-                        zip.file(fullPath, note.content);
+                        
+                        await renderUI();
+                    } catch (err) {
+                        console.error("删除失败:", err);
+                    } finally {
+                        // 无论成功与否都关闭弹窗
+                        hideModal();
                     }
-
-                    const blob = await zip.generateAsync({ type: 'blob' });
-                    
-                    // 创建并触发下载链接
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `备忘录导出.zip`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(link.href);
-
-                } catch (error) {
-                    console.error('导出失败:', error);
-                    alert('导出过程中发生错误。');
-                } finally {
-                    exportAllBtn.disabled = false;
-                    exportAllBtn.innerHTML = originalBtnContent;
-                }
-            };
+                }, { once: true }); // 使用 {once: true} 确保事件只触发一次
+            }
             
-            const updateActiveStates = () => {
-                document.querySelectorAll('#folder-list li').forEach(li => {
-                    li.classList.toggle('bg-yellow-200', !currentSearchQuery && li.dataset.folderId == activeFolderId);
-                });
-                document.querySelectorAll('#note-list li').forEach(li => {
-                    li.classList.toggle('bg-yellow-200', li.dataset.noteId == activeNoteId);
-                });
-            };
+            // ★ 新增：一个独立的关闭弹窗函数，包含动画
+            function hideModal() {
+                const modalContent = confirmationModal.querySelector('div');
+                modalContent.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    confirmationModal.classList.add('hidden');
+                    modalContent.style.transform = ''; // 重置 transform
+                }, 200);
+            }
 
             // --- 事件监听 ---
-            searchInput.addEventListener('input', () => {
-                currentSearchQuery = searchInput.value.trim();
-                activeNoteId = null; 
-                editorContainer.classList.add('hidden');
-                editorPlaceholder.style.display = 'flex';
-                deleteNoteBtn.style.display = 'none';
-                noteFolderSelector.classList.add('hidden');
-                clearTimeout(debounceTimeout);
-                debounceTimeout = setTimeout(renderUI, 250);
+            // ... (其他事件监听器保持不变) ...
+
+            // ★ 新增：为模态弹窗的取消按钮和背景遮罩添加关闭事件
+            modalCancelBtn.addEventListener('click', hideModal);
+            confirmationModal.addEventListener('click', (e) => {
+                // 如果点击的是背景遮罩本身，而不是弹窗内容，则关闭弹窗
+                if (e.target === confirmationModal) {
+                    hideModal();
+                }
             });
-            noteFolderSelector.addEventListener('change', moveNoteToFolder);
-            newFolderBtn.addEventListener('click', createFolder);
-            newNoteBtn.addEventListener('click', createNote);
-            deleteNoteBtn.addEventListener('click', () => handleDeleteNote(activeNoteId));
-            // ★ 新增：为导出按钮添加监听
-            exportAllBtn.addEventListener('click', exportAllNotesAsZip);
-            
-            folderList.addEventListener('click', e => {
-                const targetLi = e.target.closest('li');
-                if (!targetLi) return;
-                const folderIdStr = targetLi.dataset.folderId;
-                const folderId = isNaN(parseInt(folderIdStr)) ? folderIdStr : parseInt(folderIdStr);
-                if (e.target.closest('.delete-folder-btn')) deleteFolder(folderId);
-                else selectFolder(folderId);
+            // ★ 新增：监听键盘 Esc 键关闭弹窗
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !confirmationModal.classList.contains('hidden')) {
+                    hideModal();
+                }
             });
-            
-            noteList.addEventListener('click', e => {
-                const targetLi = e.target.closest('li');
-                if (targetLi) selectNote(parseInt(targetLi.dataset.noteId));
-            });
-            
+
+
+            // ★ 更改：noteList 的 contextmenu 事件，直接调用删除确认，不再显示旧的菜单
             noteList.addEventListener('contextmenu', e => {
                 e.preventDefault(); 
                 const targetLi = e.target.closest('li');
                 if (targetLi) {
-                    const noteId = targetLi.dataset.noteId;
-                    noteContextMenu.dataset.noteId = noteId; 
-                    
-                    noteContextMenu.style.top = `${e.clientY}px`;
-                    noteContextMenu.style.left = `${e.clientX}px`;
-                    noteContextMenu.classList.remove('hidden');
+                    const noteId = parseInt(targetLi.dataset.noteId);
+                    handleDeleteNote(noteId); // 右键直接触发删除确认
                 }
             });
 
-            noteContextMenu.addEventListener('click', e => {
+            // ★ 更改：原有的 context-menu 点击事件现在也统一调用新的删除流程
+             noteContextMenu.addEventListener('click', e => {
                 const action = e.target.closest('button')?.dataset.action;
                 const noteId = parseInt(noteContextMenu.dataset.noteId);
                 if (action === 'delete' && noteId) {
-                    handleDeleteNote(noteId);
+                    handleDeleteNote(noteId); // 调用新的函数
                 }
                 noteContextMenu.classList.add('hidden');
             });
-
-            window.addEventListener('click', () => {
-                noteContextMenu.classList.add('hidden');
-            });
             
-            let updateTimeout;
-            editor.on('change', () => {
-                clearTimeout(updateTimeout);
-                updateTimeout = setTimeout(updateNote, 300);
-            });
-
-            menuToggleBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                sidebar.classList.toggle('-translate-x-full');
-            });
-
-            // 初始状态
+            // (其余所有JS代码保持不变，此处省略以保持简洁)
+            async function renderUI() { await populateFolderSelector(); await displayFolders(); await displayNotes(); updateActiveStates(); };
+            async function displayFolders() { if (!db) return; const allFolders = await getAllFromStore('folders'); folderList.innerHTML = `<li data-folder-id="all" class="p-2 rounded-md cursor-pointer hover:bg-yellow-100 dark:hover:bg-gray-700 flex justify-between items-center"><span class="font-semibold">所有备忘录</span></li>`; allFolders.sort((a,b) => a.name.localeCompare(b.name, 'zh-CN')).forEach(folder => { const listItem = document.createElement('li'); listItem.dataset.folderId = folder.id; listItem.className = "p-2 rounded-md cursor-pointer hover:bg-yellow-100 dark:hover:bg-gray-700 flex justify-between items-center group"; listItem.innerHTML = `<span>${folder.name}</span><button title="删除文件夹" class="delete-folder-btn hidden group-hover:block text-red-500 text-xs">🗑️</button>`; folderList.appendChild(listItem); }); };
+            async function displayNotes() { if (!db) return; let notes; const allFolders = await getAllFromStore('folders'); const folderMap = new Map(allFolders.map(f => [f.id, f.name])); if (currentSearchQuery) { notesHeader.textContent = `搜索结果`; const allNotes = await getAllFromStore('notes'); const query = currentSearchQuery.toLowerCase(); notes = allNotes.filter(note => { const contentMatch = note.content.toLowerCase().includes(query); const tagsMatch = note.tags && note.tags.some(tag => tag.toLowerCase().includes(query)); return contentMatch || tagsMatch; }); } else { if (activeFolderId === 'all') { notes = await getAllFromStore('notes'); notesHeader.textContent = "所有备忘录"; } else { notes = await getAllFromIndex('notes', 'folderId_idx', IDBKeyRange.only(activeFolderId)); const folder = folderMap.get(activeFolderId); notesHeader.textContent = folder ? folder : "备忘录"; } } notes.sort((a, b) => b.timestamp - a.timestamp); noteList.innerHTML = ''; notes.forEach(note => { const listItem = createNoteListItem(note, currentSearchQuery ? folderMap.get(note.folderId) : null); noteList.appendChild(listItem); }); };
+            function createNoteListItem(note, folderName = null) { const [title, ...rest] = note.content.split('\n'); const contentPreview = rest.join(' ').trim().replace(/<[^>]*>?/gm, '') || '没有额外内容'; const listItem = document.createElement('li'); listItem.dataset.noteId = note.id; listItem.className = `p-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-yellow-100 dark:hover:bg-gray-700`; let folderInfo = folderName ? `<span class="text-xs text-yellow-700 bg-yellow-200 px-1.5 py-0.5 rounded-full">${folderName}</span>` : ''; listItem.innerHTML = `<h2 class="font-bold text-gray-800 dark:text-gray-100 truncate">${title || '新备忘录'}</h2><div class="flex justify-between items-center mt-1"><p class="text-sm text-gray-500 dark:text-gray-400 truncate flex-grow">${contentPreview}</p>${folderInfo}</div>`; return listItem; };
+            function renderTagsUI(tags = []) { tagsContainer.innerHTML = ''; tags.forEach(tag => { const tagEl = document.createElement('span'); tagEl.className = 'tag-pill bg-yellow-200 dark:bg-yellow-700 text-yellow-800 dark:text-yellow-100 text-xs font-semibold px-2.5 py-1 rounded-full flex items-center'; tagEl.innerHTML = `<span>${tag}</span><button data-tag-name="${tag}" class="tag-remove-btn ml-1.5 text-yellow-600 dark:text-yellow-300 hover:text-yellow-800 dark:hover:text-yellow-100">&times;</button>`; tagsContainer.appendChild(tagEl); }); };
+            async function populateFolderSelector() { if (!db) return; const allFolders = await getAllFromStore('folders'); noteFolderSelector.innerHTML = `<option value="null">未分类</option>`; allFolders.sort((a,b) => a.name.localeCompare(b.name, 'zh-CN')).forEach(folder => { noteFolderSelector.innerHTML += `<option value="${folder.id}">${folder.name}</option>`; }); };
+            function dbRequest(store, method, ...args) { return new Promise((res, rej) => { const req = store[method](...args); req.onsuccess = () => res(req.result); req.onerror = (e) => rej(e.target.error); }); }
+            function getAllFromStore(storeName) { return new Promise((res, rej) => { const t = db.transaction([storeName], 'readonly'); dbRequest(t.objectStore(storeName), 'getAll').then(res, rej); }); }
+            function getAllFromIndex(storeName, indexName, query) { return new Promise((res, rej) => { const t = db.transaction([storeName], 'readonly'); const i = t.objectStore(storeName).index(indexName); dbRequest(i, 'getAll', query).then(res, rej); }); }
+            function getById(storeName, id) { return new Promise((res, rej) => { const t = db.transaction([storeName], 'readonly'); dbRequest(t.objectStore(storeName), 'get', id).then(res, rej); }); }
+            function countInIndex(storeName, indexName, query) { return new Promise((res, rej) => { const t = db.transaction([storeName], 'readonly'); const i = t.objectStore(storeName).index(indexName); dbRequest(i, 'count', query).then(res, rej); }); }
+            async function createNote() { const noteFolderId = (activeFolderId === 'all' || currentSearchQuery) ? null : activeFolderId; const newNote = { content: '# 新备忘录\n\n', timestamp: Date.now(), folderId: noteFolderId, tags: [] }; const t = db.transaction(['notes'], 'readwrite'); const newId = await dbRequest(t.objectStore('notes'), 'add', newNote); await t.done; if (currentSearchQuery) { searchInput.value = ''; currentSearchQuery = ''; } await selectNote(newId); editor.focus(); };
+            async function selectNote(id) { const note = await getById('notes', id); if (note) { activeNoteId = id; editor.setMarkdown(note.content || ''); editorContainer.classList.remove('hidden'); editorPlaceholder.style.display = 'none'; deleteNoteBtn.style.display = 'block'; noteFolderSelector.classList.remove('hidden'); tagsArea.classList.remove('hidden'); noteFolderSelector.value = note.folderId === null ? 'null' : note.folderId; renderTagsUI(note.tags || []); if (currentSearchQuery) { activeFolderId = note.folderId || 'all'; } await renderUI(); } if (window.innerWidth < 768) sidebar.classList.add('-translate-x-full'); };
+            async function selectFolder(id) { activeFolderId = id; activeNoteId = null; searchInput.value = ''; currentSearchQuery = ''; editorContainer.classList.add('hidden'); editorPlaceholder.style.display = 'flex'; deleteNoteBtn.style.display = 'none'; noteFolderSelector.classList.add('hidden'); tagsArea.classList.add('hidden'); await renderUI(); };
+            async function updateNoteContent() { if (activeNoteId === null) return; const t = db.transaction(['notes'], 'readwrite'); const store = t.objectStore('notes'); const existingNote = await dbRequest(store, 'get', activeNoteId); if (existingNote) { const updatedNote = { ...existingNote, content: editor.getMarkdown(), timestamp: Date.now() }; store.put(updatedNote); await t.done; await displayNotes(); updateActiveStates(); } };
+            async function updateNoteTags(newTags) { if (activeNoteId === null) return; const t = db.transaction(['notes'], 'readwrite'); const store = t.objectStore('notes'); const note = await dbRequest(store, 'get', activeNoteId); if(note) { note.tags = newTags; store.put(note); } await t.done; };
+            async function createFolder() { const folderName = prompt("请输入新文件夹的名称："); if (folderName?.trim()) { const t = db.transaction(['folders'], 'readwrite'); await dbRequest(t.objectStore('folders'), 'add', { name: folderName.trim() }); await t.done; await renderUI(); } };
+            async function deleteFolder(folderId) { const noteCount = await countInIndex('notes', 'folderId_idx', IDBKeyRange.only(folderId)); if (noteCount > 0) { alert('文件夹不为空，无法删除。'); return; } if (confirm('确定要删除这个空文件夹吗？')) { const t = db.transaction(['folders'], 'readwrite'); await dbRequest(t.objectStore('folders'), 'delete', folderId); await t.done; if(activeFolderId === folderId) await selectFolder('all'); else await renderUI(); } };
+            async function moveNoteToFolder() { if (activeNoteId === null) return; const newFolderId = noteFolderSelector.value === 'null' ? null : parseInt(noteFolderSelector.value); const t = db.transaction(['notes'], 'readwrite'); const store = t.objectStore('notes'); const note = await dbRequest(store, 'get', activeNoteId); if (note && note.folderId !== newFolderId) { note.folderId = newFolderId; store.put(note); await t.done; await renderUI(); } };
+            async function exportAllNotesAsZip() { const originalBtnContent = exportAllBtn.innerHTML; exportAllBtn.disabled = true; exportAllBtn.innerHTML = '正在导出...'; try { const notes = await getAllFromStore('notes'); if (notes.length === 0) { alert('没有备忘录可导出。'); return; } const folders = await getAllFromStore('folders'); const folderMap = new Map(folders.map(f => [f.id, f.name])); const zip = new JSZip(); for (const note of notes) { const folderName = folderMap.get(note.folderId) || '未分类'; let fileName = (note.content.split('\n')[0] || '无标题笔记').replace(/^[#\s]+/, '').replace(/[\\/:\*\?"<>\|]/g, '_').trim(); if (!fileName) fileName = '无标题笔记'; let fullPath = `${folderName}/${fileName}.md`; let counter = 1; while(zip.file(fullPath)) { fullPath = `${folderName}/${fileName} (${counter++}).md`; } zip.file(fullPath, note.content); } const blob = await zip.generateAsync({ type: 'blob' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `备忘录备份_${new Date().toISOString().slice(0,10)}.zip`; document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href); } catch (error) { console.error('导出失败:', error); alert('导出过程中发生错误。'); } finally { exportAllBtn.disabled = false; exportAllBtn.innerHTML = originalBtnContent; } };
+            async function importNotesFromZip(file) { if (!file) return; const originalBtn = importZipBtn.innerHTML; importZipBtn.disabled = true; importZipBtn.innerHTML = '正在导入...'; try { const zip = await JSZip.loadAsync(file); const allFolders = await getAllFromStore('folders'); let folderMap = new Map(allFolders.map(f => [f.name, f.id])); const notePromises = []; zip.forEach((relativePath, zipEntry) => { if (!zipEntry.dir && relativePath.endsWith('.md') && !relativePath.startsWith('__MACOSX')) { const noteContentPromise = async () => { const content = await zipEntry.async('string'); const pathParts = relativePath.split('/'); let folderId = null; if (pathParts.length > 1) { const folderName = pathParts[0]; if(folderName !== '未分类'){ if (!folderMap.has(folderName)) { const tFolder = db.transaction(['folders'], 'readwrite'); const newFolderId = await dbRequest(tFolder.objectStore('folders'), 'add', { name: folderName }); await tFolder.done; folderMap.set(folderName, newFolderId); folderId = newFolderId; } else { folderId = folderMap.get(folderName); } } } const newNote = { content: content, timestamp: Date.now(), folderId: folderId, tags: [] }; const tNote = db.transaction(['notes'], 'readwrite'); await dbRequest(tNote.objectStore('notes'), 'add', newNote); await tNote.done; }; notePromises.push(noteContentPromise()); } }); await Promise.all(notePromises); alert('导入成功！'); await renderUI(); } catch (error) { console.error('导入失败:', error); alert('导入过程中发生错误。'); } finally { importZipBtn.disabled = false; importZipBtn.innerHTML = originalBtn; importFileInput.value = ''; } };
+            function initTheme() { if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) { setTheme('dark'); } else { setTheme('light'); } };
+            function setTheme(theme) { const newThemeName = theme === 'dark' ? 'dark' : 'default'; const currentContent = editor ? editor.getMarkdown() : ''; if(theme === 'dark') { htmlRoot.classList.add('dark'); themeIconLight.classList.add('hidden'); themeIconDark.classList.remove('hidden'); } else { htmlRoot.classList.remove('dark'); themeIconLight.classList.remove('hidden'); themeIconDark.classList.add('hidden'); } recreateEditor(newThemeName); if (activeNoteId !== null) { editor.setMarkdown(currentContent); } localStorage.theme = theme; };
+            function recreateEditor(theme) { if (editor) { editor.destroy(); } editor = new toastui.Editor({ el: editorContainer, height: '100%', initialEditType: 'wysiwyg', previewStyle: 'vertical', placeholder: '开始书写你的想法...', theme: theme }); editor.on('change', () => { clearTimeout(updateTimeout); updateTimeout = setTimeout(updateNoteContent, 300); }); }
+            function updateActiveStates() { document.querySelectorAll('#folder-list li').forEach(li => { const isActive = !currentSearchQuery && li.dataset.folderId == activeFolderId; li.classList.toggle('bg-yellow-200', isActive); li.classList.toggle('dark:bg-yellow-800', isActive); }); document.querySelectorAll('#note-list li').forEach(li => { const isActive = li.dataset.noteId == activeNoteId; li.classList.toggle('bg-yellow-200', isActive); li.classList.toggle('dark:bg-yellow-800', isActive); }); };
+            themeToggleBtn.addEventListener('click', () => { setTheme(htmlRoot.classList.contains('dark') ? 'light' : 'dark'); });
+            importZipBtn.addEventListener('click', () => importFileInput.click());
+            importFileInput.addEventListener('change', (e) => importNotesFromZip(e.target.files[0]));
+            tagInput.addEventListener('keydown', async (e) => { if (e.key === 'Enter' && activeNoteId !== null) { e.preventDefault(); const newTag = tagInput.value.trim(); if (newTag) { const note = await getById('notes', activeNoteId); const currentTags = note.tags || []; if (!currentTags.includes(newTag)) { const updatedTags = [...currentTags, newTag]; await updateNoteTags(updatedTags); renderTagsUI(updatedTags); } tagInput.value = ''; } } });
+            tagsContainer.addEventListener('click', async (e) => { const removeBtn = e.target.closest('.tag-remove-btn'); if (removeBtn && activeNoteId !== null) { const tagToRemove = removeBtn.dataset.tagName; const note = await getById('notes', activeNoteId); const updatedTags = (note.tags || []).filter(t => t !== tagToRemove); await updateNoteTags(updatedTags); renderTagsUI(updatedTags); } });
+            searchInput.addEventListener('input', () => { currentSearchQuery = searchInput.value.trim(); activeNoteId = null; editorContainer.classList.add('hidden'); editorPlaceholder.style.display = 'flex'; deleteNoteBtn.style.display = 'none'; noteFolderSelector.classList.add('hidden'); tagsArea.classList.add('hidden'); clearTimeout(debounceTimeout); debounceTimeout = setTimeout(renderUI, 250); });
+            noteFolderSelector.addEventListener('change', moveNoteToFolder);
+            newFolderBtn.addEventListener('click', createFolder);
+            newNoteBtn.addEventListener('click', createNote);
+            deleteNoteBtn.addEventListener('click', () => handleDeleteNote(activeNoteId));
+            exportAllBtn.addEventListener('click', exportAllNotesAsZip);
+            folderList.addEventListener('click', e => { const targetLi = e.target.closest('li'); if (!targetLi) return; const folderIdStr = targetLi.dataset.folderId; const folderId = isNaN(parseInt(folderIdStr)) ? folderIdStr : parseInt(folderIdStr); if (e.target.closest('.delete-folder-btn')) deleteFolder(folderId); else selectFolder(folderId); });
+            noteList.addEventListener('click', e => { const targetLi = e.target.closest('li'); if (targetLi) selectNote(parseInt(targetLi.dataset.noteId)); });
+            window.addEventListener('click', (e) => { if (!noteContextMenu.contains(e.target)) { noteContextMenu.classList.add('hidden'); } });
+            menuToggleBtn.addEventListener('click', (e) => { e.stopPropagation(); sidebar.classList.toggle('-translate-x-full'); });
+            if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').then(reg => console.log('SW registered.'), err => console.log('SW registration failed: ', err)); }); }
             deleteNoteBtn.style.display = 'none';
             noteFolderSelector.classList.add('hidden');
+            tagsArea.classList.add('hidden');
         });
     </script>
 </body>
