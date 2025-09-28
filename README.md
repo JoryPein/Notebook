@@ -2,6 +2,8 @@
 
 这是一款完全在浏览器中运行的纯前端备忘录/笔记应用程序。它使用 IndexedDB 将您的所有数据安全地存储在本地计算机上，无需服务器，无需注册，确保了您的隐私。
 
+![img](./Screenshot.png)
+
 ## ✨ 主要功能
 
 -   **强大的 Markdown 编辑器**: 集成了 [Toast UI Editor](https://ui.toast.com/tui-editor)，提供所见即所得 (WYSIWYG) 和 Markdown 两种编辑模式，支持丰富的格式选项。
